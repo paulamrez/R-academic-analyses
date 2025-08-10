@@ -1,0 +1,457 @@
+---
+title: "Sensor-Data-Cleaning-and-Inference"
+author: "Paula Ramirez"
+date: "07/10/2024"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+# Sensor-Data-Cleaning-and-Inference
+  
+## 1. Data Transformation and Preparation
+
+### 1. Initial Transformation
+
+```{r setup, include=FALSE}
+##################################################
+### Install Libraries                           ##
+##################################################
+
+if(!require(pastecs)){install.packages("pastecs")}
+library("pastecs")
+
+if(!require(lattice)){install.packages("lattice")}
+library("lattice")
+
+knitr::opts_chunk$set(fig.width=10, fig.height=6,
+                      fig.path='Figs/', echo = TRUE)
+#Setting my working directory
+library(here)
+knitr::opts_knit$set(root.dir = here::here())
+# Verify working directory
+getwd()  
+```
+
+Basic configurations
+
+```{r}
+#Clearing all the plots, the console and the workspace.
+#Setting the overall format for numbers.
+if(!is.null(dev.list())) dev.off()
+cat("\014")
+rm(list=ls())
+options(scipen=9)
+
+```
+a. Reading the file and appending my initials to all variables in the data frame
+
+```{r}
+#Reading the file and 
+sensor_tracking_PR <- read.table(here("Sensor-Data-Cleaning-and-Inference", "Data_Sensor.txt"),
+                                  header = TRUE, sep = ",")
+#Converting it to dataframe.
+sensor_tracking_PR <- as.data.frame(sensor_tracking_PR)
+#Append PR initials to all variables in the dataframe
+colnames(sensor_tracking_PR) <- paste(colnames(sensor_tracking_PR), "PR", sep = "_")
+#Showing first results 
+head(sensor_tracking_PR)
+```
+
+b. Transform character variables to factor variables
+
+```{r}
+#Changing to factor
+sensor_tracking_PR$Ren_PR <- as.factor(sensor_tracking_PR$Ren_PR)
+str(sensor_tracking_PR)
+```
+
+### 2. Outliers
+
+#### Finding outliers
+
+a. Techniques to identify outliers.
+
+
+
+```{r}
+# Analyzing dates and times out of range using the range function
+range(sensor_tracking_PR$DT_PR)
+range(sensor_tracking_PR$TM_PR)
+# Analyzing odd values in the time variable
+barplot(table(sensor_tracking_PR$TM_PR),
+        col=5,
+        main="Bar Plot of hours", cex.names=.75,
+        xlab="Hours")
+
+#Exploring the status of light from sensors with unique function (must be only 1 and 0)
+unique(sensor_tracking_PR$S1_L_PR)
+unique(sensor_tracking_PR$S2_L_PR)
+unique(sensor_tracking_PR$S3_L_PR)
+
+#Box plot to identify outliers
+boxplot(sensor_tracking_PR$S1_T_PR, horizontal=TRUE, pch=20,
+        main="Outlier Analysis in Sensor #1 Temperature Data", 
+        xlab="Temperature (in C) from Sensor 1",
+        col=4)
+boxplot(sensor_tracking_PR$S2_T_PR, horizontal=TRUE, pch=20,
+        main="Outlier Analysis in Sensor #2 Temperature Data", 
+        xlab="Temperature (in C) from Sensor 2",
+        col=4)
+boxplot(sensor_tracking_PR$S3_T_PR, horizontal=TRUE, pch=20,
+        main="Outlier Analysis in Sensor #3 Temperature Data", 
+        xlab="Temperature (in C) from Sensor 3",
+        col=4)
+boxplot(sensor_tracking_PR$FN_PR, horizontal=TRUE, pch=20,
+        main="Outlier Analysis Fan Speed", 
+        xlab="Bathroom Fan Speed (in rpm)",
+        col=3)
+
+```
+
+b. Comment on any outliers you see and deal with them appropriately. Make sure you explain why you dealt with them the way you decided to.
+
+#### Observations and findings:
+
+- Using the range function and bar plot, I identified some unusual values in the time variable (-15, -12, -11).
+
+- I analyzed the sensor light values with unique function to find odd values but found no anomalies.
+
+- I found some relevant outliers in S1_T_PR (temperature-sensor 1), S2_T_PR (temperature-sensor 2) and FN_PR (fan speed) in the box plot. These values are outside the expected range for fan speed and temperature variables. To get more details, I created a density plot for these variables and analyzed them with some categorical variables like rooms and room conditions. 
+
+
+```{r}
+
+#Density Plot - looking for more details in S2 and fan speed
+densityplot( ~ sensor_tracking_PR$S2_T_PR, pch=6,
+             main='Details in Sensor #2 Temperature Data',
+             xlab="Temp. (in C) Sensor 2",
+             col=4)
+densityplot( ~ sensor_tracking_PR$FN_PR, pch=6,
+             main='Details Fan Speed',
+             xlab="Bathroom Fan Speed (in rpm)",
+             col=3)
+
+
+# Identify if outliers in S2_T are specific to a certain room
+boxplot(S2_T_PR ~ Room_PR ,
+        data=sensor_tracking_PR,
+        main="Distribution of Sensor S2_T_PR by Rooms",
+        horizontal=TRUE, col=4,pch=20)
+# Identify if outliers in Fan  Speed are specific to a certain room condition
+boxplot(FN_PR ~ Ren_PR ,
+        data=sensor_tracking_PR,
+        main="Distribution of Fan Speed by Room Condition (New/Old)",
+        horizontal=TRUE, col=3,pch=20)
+
+```
+
+#### Decisions 
+
+- I decided to eliminate rows with unusual times, as they seem to be wrong records.
+ 
+- In those density plots, I found two data points significantly distant from the other outliers. For S1_T_PR and S2_T_PR minimum and maximum points, for FN_PR maximum point.
+
+Due to this, I decided to remove it from the data set.
+
+
+```{r}
+#TIME OF DAY
+#Find row number with odd values (-15, -12, -11)
+odds_hours_pr <- which(sensor_tracking_PR$TM_PR %in% c(-15,-12,-11)) 
+#Deleting the data points in hours
+sensor_tracking_PR <- sensor_tracking_PR[-c(odds_hours_pr),]
+barplot(table(sensor_tracking_PR$TM_PR),
+        col=5,
+        main="Bar Plot of hours", cex.names=.75,
+        xlab="Hours")
+
+#SENSOR NUMBER 1
+#Finding record with minimum and maximum value and deleting it
+head(sensor_tracking_PR[order(sensor_tracking_PR$S1_T_PR),],1) 
+head(sensor_tracking_PR[rev(order(sensor_tracking_PR$S1_T_PR)),],1) 
+#Row number for max value
+max_sensor1_pr <- which(sensor_tracking_PR$S1_T_PR == max(sensor_tracking_PR$S1_T_PR)) 
+#Row number for min value 
+min_sensor1_pr <- which(sensor_tracking_PR$S1_T_PR == min(sensor_tracking_PR$S1_T_PR))  
+sensor_tracking_PR <- sensor_tracking_PR[-c(min_sensor1_pr,max_sensor1_pr),]
+densityplot( ~ sensor_tracking_PR$S1_T_PR, pch=6,
+             main='Details in Sensor #2 Temperature Data',
+             xlab="Temp. (in C) Sensor 2",
+             col=4)
+
+#SENSOR NUMBER 2
+#Finding record with minimum and maximum value and deleting it
+head(sensor_tracking_PR[order(sensor_tracking_PR$S2_T_PR),],1) 
+head(sensor_tracking_PR[rev(order(sensor_tracking_PR$S2_T_PR)),],1) 
+#Row number for max value
+max_sensor2_pr <- which(sensor_tracking_PR$S2_T_PR == max(sensor_tracking_PR$S2_T_PR)) 
+#Row number for min value 
+min_sensor2_pr <- which(sensor_tracking_PR$S2_T_PR == min(sensor_tracking_PR$S2_T_PR))  
+sensor_tracking_PR <- sensor_tracking_PR[-c(min_sensor2_pr,max_sensor2_pr),]
+densityplot( ~ sensor_tracking_PR$S2_T_PR, pch=6,
+             main='Details in Sensor #2 Temperature Data',
+             xlab="Temp. (in C) Sensor 2",
+             col=4)
+
+#FUN SPEED
+#Finding record with maximum value and deleting it
+head(sensor_tracking_PR[rev(order(sensor_tracking_PR$FN_PR)),],1)
+max_fun_speed <- which(sensor_tracking_PR$FN_PR == max(sensor_tracking_PR$FN_PR)) 
+#Row number for max value 
+sensor_tracking_PR <- sensor_tracking_PR[-c(max_fun_speed),]
+densityplot( ~ sensor_tracking_PR$FN_PR, pch=6,
+             main='Details Fan Speed',
+             xlab="Bathroom Fan Speed (in rpm)",
+             col=3)
+```
+
+### 3. Reduce Dimensionality
+
+a. Drop any variables that do not contribute any useful analytical information at all.
+
+```{r}
+head(sensor_tracking_PR,3)
+#Deleting index value
+sensor_tracking_PR <- sensor_tracking_PR[-c(1)]
+head(sensor_tracking_PR)
+
+#changing Ren_PR to create correlations
+sensor_tracking_PR$Ren_PR <- ifelse(sensor_tracking_PR$Ren_PR == "New", 1, 0)
+
+#execution time before reducing dimensions 
+start <- Sys.time()
+cor(sensor_tracking_PR,method="spearman")
+end <- Sys.time()
+s_time_pr <- end - start
+s_time_pr
+```
+I decided to remove  the index_PR is used as row identifiers, it does not contribute any useful analitycal information.
+I converted the room condition variable (Ren_PR) to Boolean type for the purpose of correlation analysis.
+
+b. Apply the Missing Value Filter to remove appropriate columns of data.
+
+```{r}
+# Identify columns > 99% missing with summary function
+summary(sensor_tracking_PR)
+```
+In the data set there are no nulls values
+
+c. Apply the Low Variance Filter to remove appropriate columns of data.
+
+```{r}
+# Identify columns with low variance
+stat.desc(sensor_tracking_PR)  
+#Deleting 7 column (S3_L_PR) without variance
+sensor_tracking_PR <- sensor_tracking_PR[-c(7)]
+head(sensor_tracking_PR)
+```
+The sensor 3 did not detect changes in the light, this dimension is not necessary 
+
+d. Apply the High Correlation Filter to remove appropriate columns of data.
+
+```{r}
+#isnumeric,ask to profesor unlist someethint
+# Identify high correlation filter
+cor(sensor_tracking_PR,method="spearman")
+#cor(sensor_tracking_PR,method="pearson")
+#Deleting 5 column (S2_L_PR) high relationship with S1_L_PR
+sensor_tracking_PR <- sensor_tracking_PR[-c(6)]
+head(sensor_tracking_PR)
+```
+I have eliminated the dimension *S2_L_PR* due to it is highly correlated with *S1_L_PR*. It is not necessary to keep both. 
+
+e. Based on our discussions in class, what are some specific benefits of reducing the dimensionality of this particular dataset? Be specific. For example, if it increases computational efficiency, specify how much of an improvement.
+
+```{r}
+#execution time after reducing dimensions 
+start <- Sys.time()
+cor(sensor_tracking_PR,method="spearman")
+end <- Sys.time()
+e_time_pr <- end - start
+
+#Difference executing correlation function before and after reduction
+improvement_pr <-- s_time_pr - e_time_pr
+improvement_pr
+```
+In this dataset I have eliminated the index column that were not relevant for the analysis. I have applied two effective reductions methods, low variance filter and High Correlation Filter, which means that it also did not provide relevance for the analysis.
+
+Even though there is not significant data, I have compared the correlation processing times before and after the analysis, showing a slight improvement in the times. (see *improvement_pr* variable)
+
+With fewer features or variables, the analysis could improve overall performance. Additionally, it allows for better visualization of the data to create best visualizations analysis.
+
+## 2. Organizing Data
+
+### a. Create a histogram for Temperature from Sensor 1.
+
+```{r}
+#Histogram temperature sensor 1
+hist(sensor_tracking_PR$S1_T_PR,
+     col=4,
+     breaks = 10,
+     main="Temperature (C) Distribution - Sensor 1",
+     xlab="S1_T - Temperature (in C) from Sensor 1",
+     ylab="Frequency",
+     pch=15
+     
+    )  
+```
+
+The histogram shows that the majority of records for the sensor number 1 are concentrated in the temperature range of  20 to 26 C degrees.
+
+### b. Create a histogram for Fan Speed.
+
+```{r}
+#Histogram fan speed in rpm
+hist(sensor_tracking_PR$FN_PR,
+     col=3,
+     main="Fan Speed Distribution",
+     xlab="FN Bathroom Fan Speed (in rpm)",
+     ylab="Frequency"
+    )  
+```
+The histogram revealed that the most common fan speed range is between ~1075rpm and ~1125rpm. There are little extreme values.
+
+### c. Create a scatter plot showing the relationship between Temperature Sensor 1 and Fan Speed. (note: Sensor 1 should be on the x-axis, Fan Speed should be the y-axis)
+
+```{r}
+#Creating Scatter plot 
+plot(FN_PR ~ S1_T_PR,
+     data=sensor_tracking_PR,
+     col=7,
+     pch=4,
+     main="Relationship Temperature Sensor#1 - Fan Speed",
+     xlab="Temperature (in C) - Sensor 1",
+     ylab="Bathroom Fan Speed (in rpm)")
+```
+The markets are dispersed, which means that there are not a clear lineal relationship between those variables. 
+
+### d. What conclusions, if any, can you draw from the chart?
+
+The fan speed of the bathrooms is not correlated with the temperature (there are not a clear lineal relationship). However the chart shows that both, fan speed and sensor 1's temperature remain within consistent ranges, each with its own range of variation and unit of measurement.
+
+### e. Calculate a correlation coefficient between these two variables. Why did you choose the correlation coefficient you did? What conclusion you draw from it?
+
+```{r}
+#Calculating correlation coefficient 
+print("Spearman Correlation")
+#Pearson defaults, but assumes normality
+round(cor(sensor_tracking_PR$FN_PR, sensor_tracking_PR$S1_T_PR, method="spearman"),3)
+```
+Based on my notes and the article of 'Correlation Coefficients' (Schober et al., 2018), I could not use the default method Pearson for this specific data set, because it assumes normality and a linear relationship. Meanwhile, Spearman correlation is better due to the significant variability in the observations. 
+
+The correlation coefficient was of 0.013, which means that the relationship is significantly weak.
+
+
+## 3. Inference
+
+### 1. Normality
+
+a. Create a QQ Normal plot of for Fan Speed.
+
+```{r}
+#Checking normal distribution
+qqnorm(sensor_tracking_PR$FN_PR, main="QQ Normal plot to Fan Speed", pch=20)
+qqline(sensor_tracking_PR$FN_PR)
+```
+The majority of the points fall along the diagonal line; however, a deviation from the straight line can be observed at the tails, indicanting that distribution is not normal.
+
+b. Conduct a statistical test for normality on Fan Speed.
+
+```{r}
+#Shapiro test
+shapiro.test(sensor_tracking_PR$FN_PR)
+```
+I did a Shapiro test to validate if the data is normal distributed.
+
+c. Is Fan Speed normally distributed? What led you to this conclusion?
+
+Fan speed is not normally distributed, I have executed the Shapiro Test, and the result was 0.013. The hypothesis that the data is normally distributed must be rejected due to the p-value is less than 0.05.
+
+### 2. Statistically Significant Differences
+
+a. Compare Temperature from Sensor 2 between ‘New’ and ‘Old’ rooms in your dataset using a suitable hypothesis test.
+
+```{r}
+#Returning Ren_PR to factor
+sensor_tracking_PR$Ren_PR <- ifelse(sensor_tracking_PR$Ren_PR == 1, "New", "Old")
+sensor_tracking_PR$Ren_PR <- as.factor(sensor_tracking_PR$Ren_PR)
+#Shapiro test
+shapiro.test(sensor_tracking_PR$S2_T_PR)
+#Checking normal distribution
+qqnorm(sensor_tracking_PR$S2_T_PR, main="QQ Normal plot Temperature Sensor 2", pch=20)
+qqline(sensor_tracking_PR$S2_T_PR)
+#Comparing Variance F-Test
+var.test(S2_T_PR ~ Ren_PR, data=sensor_tracking_PR)
+#Comparing Variance F-Test
+wilcox.test(S2_T_PR ~ Ren_PR, data=sensor_tracking_PR)
+
+```
+
+b. Explain why you chose the test you did.
+
+Firstly, I tried with T-Test, my results for each assumption was:
+
+  1. Data are independent --> PASS
+  
+  2. Data is normal distributed. The *S2_T_PR * passed the Shapiro Test with p-value = 0.6232 and  QQ Normal plot shows a straight line. PASS
+  
+  3. F-Test --> FAIL. p-value = 0.002454 < 0.05
+
+I could not use T-Test because Temperature Sensor 2 violates normality assumptions. For that reason my final test was Wilcoxon test.  
+
+c. Do you have strong evidence that Temperature from Sensor 2 is different between new and old rooms?
+
+The result for Wilcoxon test was p-value < 2.2e-16, that means that there is significant difference in means between new and old rooms.
+
+```{r}
+# Difference means between 'New' and 'Old' Room
+boxplot( S2_T_PR ~ Ren_PR, data=sensor_tracking_PR, main="Temperature by Room Conditions",
+                xlab="State of Room",color=2, ylab="Temperature Sensor 2 (in C)",pch=3, col=c(2,5))
+
+
+```
+
+Based onn the box plot and Wilcoxon test, I can conclude that new rooms are slightly colder that old rooms. The median temperature in old rooms is generally higher than in new rooms
+
+
+### 3. Multiple Statistical Differences
+
+a. Determine if Temperature from Sensor 1 varies by Room Number using ANOVA (statistical) and a sequence of boxplots (graphical).
+
+```{r}
+# Comparing Sensor 1 per Rooms
+boxplot( S1_T_PR ~ Room_PR, data=sensor_tracking_PR, main="Temperature Sensor 1 by Room",
+                xlab="Rooms",color=2, ylab="Temperature Sensor 1 (in C)",pch=20, col=c(2,3,4)
+         )
+
+summary(aov(S1_T_PR ~ Room_PR, data=sensor_tracking_PR))
+
+```
+Based on box plot, there is a visible variation in the medians in the room 111. However the dispersion between rooms are similar.
+The p-value is so small (<2e-16) indicates that there are significant temperature differences between rooms.
+
+
+b. Determine if Temperature from Sensor 3 varies by Room Number using ANOVA (statistical) and a sequence of boxplots (graphical).
+
+```{r}
+# Comparing Sensor 3 per Rooms
+boxplot( S3_T_PR ~ Room_PR, data=sensor_tracking_PR, main="Temperature Sensor 3 by Room",
+                xlab="Rooms",color=2, ylab="Temperature Sensor 3 (in C)"
+         )
+
+summary(aov(S3_T_PR ~ Room_PR, data=sensor_tracking_PR))
+
+```
+Based on box plot, there are not visible variations in the medians between rooms, the dispersion between rooms are similar across rooms as well.
+The p-value is 0.9 confirms that there not significant differences in temperature variations between rooms for Sensor 3, wich means the temperature variance is almost null. 
+
+
+
+### References
+
+unique function - RDocumentation. (n.d.). https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/unique
+
+match function - RDocumentation. (n.d.). https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/match
+
+Schober, P., Boer, C., & Schwarte, L. A. (2018). Correlation Coefficients: appropriate use and interpretation. Anesthesia & Analgesia, 126(5), 1763–1768. https://doi.org/10.1213/ane.0000000000002864

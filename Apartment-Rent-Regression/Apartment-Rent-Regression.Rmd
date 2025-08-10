@@ -1,0 +1,561 @@
+---
+title: "Apartment-Rent-Regression"
+author: "Paula Ramirez - Student id 8963215"
+date: "12/11/2024"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+# Apartment-Rent-Regression
+  
+## 1. Preliminary and Exploratory
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=10, fig.height=6,
+                      fig.path='Figs/', echo = TRUE)
+#Setting my working directory
+library(here)
+knitr::opts_knit$set(root.dir = here::here())
+# Verify working directory
+getwd()  
+#Clearing all the plots, the console and the workspace.
+#Setting the overall format for numbers.
+if(!is.null(dev.list())) dev.off()
+cat("\014")
+rm(list=ls())
+options(scipen=9)
+
+#If the library is not already downloaded, download it
+
+if(!require(lattice)){install.packages("lattice")}
+library("lattice")
+
+if(!require(pastecs)){install.packages("pastecs")}
+library("pastecs")
+
+if(!require(corrgram)){install.packages("corrgram")}
+library("corrgram")
+
+```
+
+### 1. Rename all variables
+
+```{r}
+#Reading the file  
+lease_data_PR <- read.table(here("Apartment-Rent-Regression", "Rent.txt"),
+                                  header = TRUE, sep = ",")
+#Converting it to dataframe.
+lease_data_PR <- as.data.frame(lease_data_PR)
+#Append PR initials to all variables in the dataframe
+colnames(lease_data_PR) <- paste(colnames(lease_data_PR), "PR", sep = "_")
+#Changing to factor
+lease_data_PR <-as.data.frame(unclass(lease_data_PR), stringsAsFactors = TRUE)
+str(lease_data_PR)
+#Showing first results 
+head(lease_data_PR)
+```
+
+### 2. Graphical and Exploratory Data Summaries
+
+```{r}
+# Evaluating atypical errors
+round(stat.desc(lease_data_PR),2)
+
+# Creating vector to names for each chart
+names_variables_PR <- c("Monthly Rent",
+                        "Number of bedrooms",
+                        "Floor",
+                        "Total number of floors in the building",
+                        "Number of bathrooms",
+                        "Size of the apartment",
+                        "City",
+                        "Leasing company",
+                        "Distance from the centre of town"
+                        )
+
+# Creating x label for each chart
+x_labels_PR <- c("$ dollars",
+                  "# bedrooms",
+                  "# Floor",
+                  "Total # of floors",
+                  "# bathrooms",
+                  "Size (Square feet)",
+                  "City",
+                  "Leasing company count",
+                  "in Km"
+                )
+
+# Creating plots
+par(mfrow=c(2,2)) 
+
+for (i in 1:ncol(lease_data_PR)) {
+    if (is.numeric(lease_data_PR[,i])) {
+      boxplot(lease_data_PR[,i],
+              main=paste("Analysis", names_variables_PR[i]),
+              xlab=x_labels_PR[i],
+              horizontal=TRUE,
+              pch=20,
+              col=6)
+  }
+}
+par(mfrow=c(2,2)) 
+
+# Creating histograms
+par(mfrow=c(2,2))
+for (i in 1:ncol(lease_data_PR)) {
+  if (is.numeric(lease_data_PR[,i])) {
+    hist(lease_data_PR[,i], main=paste("Analysis", names_variables_PR[i]),xlab=x_labels_PR[i])
+  }
+}
+
+```
+
+#### Observations and findings:
+
+- *Total # Floor and Bathrooms*: Most buildings in the dataset have between 2 and 5 floors, this is the IQR or 50% of the data set. Regarding to bathrooms, some properties have a higher number of bathrooms (4) but is not unusual.
+
+- *Distance of center of town*: 50% of the properties are located between ~2.5 and 5 km from the center of town.
+
+#### Outliers:
+
+I found some relevant outliers in the data.
+
+- *Monthly Rent (Prc_PR)*: Some observations have rental prices that are below to 0. 
+
+- *Size (Sqft_PR)*: Some properties have a larger size compared to the median, which is not unusual. However, some apartments have a listed size of 0 square feet.
+
+To get more details I will create a density plot for these variables.
+
+
+```{r}
+#RENTAL MONTHLY PRICE
+#Density Plot - looking for more details in rental prices
+densityplot( ~ lease_data_PR$Prc_PR, pch=3,
+main='Details in Monthly rent Data',
+xlab="Price in dollars",
+col=4)
+
+head(lease_data_PR[order(lease_data_PR$Prc_PR),c("Prc_PR", "Bed_PR", "floor_PR", "TotFloor_PR", "Bath_PR", "Sqft_PR", "Dist_PR")], 8)
+unusual_price_pr <- which(lease_data_PR$Prc_PR <= 0)
+unusual_price_pr
+
+# SIZE OF APARTMENTS
+#Density Plot - looking for more details in size
+densityplot( ~ lease_data_PR$Sqft_PR, pch=3,
+main='Details in Size of the apartment',
+xlab="in Square feet",
+col=2)
+
+head(lease_data_PR[order(lease_data_PR$Sqft_PR),c("Prc_PR", "Bed_PR", "floor_PR", "TotFloor_PR", "Bath_PR", "Sqft_PR", "Dist_PR")],5)
+head(lease_data_PR[rev(order(lease_data_PR$Sqft_PR)),c("Prc_PR", "Bed_PR", "floor_PR", "TotFloor_PR", "Bath_PR", "Sqft_PR", "Dist_PR")],5)
+
+unusual_sqft_pr <- which(lease_data_PR$Sqft_PR <= 250 | lease_data_PR$Sqft_PR >=3000)
+unusual_sqft_pr
+
+```
+
+#### Decisions 
+
+In those density plots, I found data points that were significantly distant from the other observations. Due to this, I decided to remove the data set points with rental prices bellow to 0 and property sizes bellow 250 or above 3000 square feet.  
+
+
+
+```{r}
+#DELETING ODD VALUES
+lease_data_PR <- lease_data_PR[-c(unusual_sqft_pr,unusual_price_pr),]
+
+#AFTER DELETION
+#RENTAL MONTHLY PRICE
+#Density Plot - looking for more details in rental prices
+densityplot( ~ lease_data_PR$Prc_PR, pch=3,
+main='Details in Monthly rent Data',
+xlab="Price in dollars",
+col=4)
+
+# SIZE OF APARTMENTS
+#Density Plot - looking for more details in size
+densityplot( ~ lease_data_PR$Sqft_PR, pch=3,
+main='Details in Size of the apartment',
+xlab="in Square feet",
+col=2)
+```
+
+
+### 3. Analysis main companies
+
+Trying to execute T-Test...
+
+```{r}
+# Identify rent prices between the two companies
+
+#Shapiro test
+shapiro.test(lease_data_PR$Prc_PR)
+
+#Checking normal distribution
+qqnorm(lease_data_PR$Prc_PR, main="QQ Normal plot Rent Prices", pch=20)
+qqline(lease_data_PR$Prc_PR)
+
+#Comparing Variance F-Test
+var.test(Prc_PR ~ Comp_PR, data=lease_data_PR)
+
+```
+
+#### Explanations 
+
+
+I found the following results for each assumption fro T-test:
+
+1. Data are independent –> PASS
+2. Data is NOT normal distributed. The *S2_T_PR* did not passed the Shapiro Test because p-value is < 0.05 (I rejected the hipothesis) and QQ
+Normal plot shows a deviation from the diagonal line. FAIL
+3. F-Test –> PASS p-value = 0.1227 > 0.05. The variances of the prices in both companies are equal (96% confident)
+
+```{r}
+
+#Wilcoxon test
+wilcox.test(Prc_PR ~ Comp_PR, data=lease_data_PR)
+
+#showing box plot
+boxplot(Prc_PR ~ Comp_PR ,
+data=lease_data_PR,
+main="Companies Rent Prices",
+horizontal=TRUE, col=3,pch=20)
+```
+  
+  
+I could not use T-Test because this metric violates 2/3 normality assumptions. For that reason I used Wilcoxon test.
+The Wilcoxon test result was p-value > 0.05, indicating that there is not significant evidence to reject the hypothesis that rental prices are the same btw the two companies.
+  
+### 4. Training and Test Set
+
+#### Spliting the dataframe into a training and a test
+
+the rate of data for my train and test set is 65/35
+My speed is --> 3215
+
+```{r}
+# Number of rows of data
+n.row <- nrow(lease_data_PR)
+# Choose sampling rate
+set.seed(3215)
+sr_pr <- 0.65
+#Choose the rows for the training sample with my student id
+training.rows <- sample(1:n.row, sr_pr*n.row, replace=FALSE)
+#Assign to the training sample
+train_pr <- subset(lease_data_PR[training.rows,])
+# Assign the balance to the Test Sample (rest of data)
+test_pr <- subset(lease_data_PR[-c(training.rows),]) 
+```
+#### Comparisson train and test dataset
+
+
+Some sumarizations
+
+```{r}
+#summaries
+summary(train_pr)
+summary(test_pr)
+
+#mean each set
+round(mean(train_pr$Prc_PR),6)
+round(mean(test_pr$Prc_PR),6)
+
+#commparing median with wilcox test
+wilcox.test(train_pr$Prc_PR, test_pr$Prc_PR)
+
+```
+
+In the summaries, I did not evidence any dissimilarities. The means show that there are not significant differences between sets. 
+
+In addition, the result of wilcoxon test (p-value = 0.07) indicates that the medians are the same. Based on these findings, it is appropriate to proceed with model creation.
+
+
+## 2. Simple Linear Regression
+
+### 1. Correlations
+
+Graphical and numerical correlations
+
+
+```{r}
+# Correlation plot
+corrgram(train_pr, order=TRUE, lower.panel=panel.shade,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Correlations in train set")
+
+#Numerical correlations
+train_cor_pr <- cor(train_pr[sapply(train_pr, is.numeric)], method="spearman")
+round(train_cor_pr, 2)
+```
+#### Findings 
+
+- *TotFloor_PR and floor_PR* 65% of correlation. There is an obvious positive correlation between both variables. Which indicates that buildings with more floors have apartments located in higher floors.
+- *Prc_PR and Bath_PR* 45% of correlation. Indicates that apartments with more bathrooms tend to have a higher monthly rent 
+- *Bed_PR and Prc_PR* -38% of surprising correlation. There is a negative correlations, which means that apartments with less bedrooms curiously are more expensive than apartments with more bedrooms.
+- *Prc_PR and Dist_PR* -29% of correlation. This negative correlations indicates that if there less distance is between apartments and center of town more expensive apartment is. 
+- *Prc_PR and Sqft_PR* 17% correlation. There is a positive correlation between price and apartment size. This indicates that bigger apartments tend to have higher rent price. Which is expected, however the correlation is weak.
+
+### 2. Simple linear regression model Prc_PR ~ Dist_PR
+
+Using rental price the dependent variable and distance from town centre as the independent variable
+
+```{r}
+# Creating linear model
+mod.Dist_PR <- lm(Prc_PR ~ Dist_PR, data = train_pr)
+
+# Creating plot with regression line
+plot(Prc_PR ~ Dist_PR, data = train_pr, pch = 42
+     , main = "Monthly Rent Price by Distance from City Center"
+     ,xlab = "Distance from City Center (km)", 
+     ylab = "Monthly Rent Price")
+abline(mod.Dist_PR, col = 14, lwd = 4)
+
+```
+
+### 3. Simple linear regression model Prc_PR ~ Sqft_PR 
+
+Using rental price the dependent variable and size of the apartment as the independent variable
+
+```{r}
+# Creating linear model
+mod.Sqft_PR <- lm(Prc_PR ~ Sqft_PR, data = train_pr)
+
+# Creating plot with regression line
+plot(Prc_PR ~ Sqft_PR, data = train_pr, pch = 42, main = "Monthly Rent Price by Size of the apartment"
+     ,xlab = "Size of the apartment (in Square feet)", 
+     ylab = "Monthly Rent Price")
+abline(mod.Sqft_PR, col = 14, lwd = 4)
+
+```
+
+### 4. Comparing the models mod.Dist_PR and mod.Sqft_PR
+
+To select the best model, it is necessary to compare the following summaries:
+
+
+```{r}
+# Comparing summaries Dist_PR
+summary(mod.Dist_PR)
+pred.Dist_PR <- predict(mod.Dist_PR, newdata=train_pr)
+RMSE_trn_Dist_PR <- sqrt(mean((train_pr$Prc_PR - pred.Dist_PR)^2))
+RMSE_trn_Dist_PR
+
+# Model in test set Dist_PR
+pred.Dist_tst_PR <- predict(mod.Dist_PR, newdata = test_pr)
+RMSE_tst_Dist_PR <- sqrt(mean((test_pr$Prc_PR - pred.Dist_tst_PR)^2))
+RMSE_tst_Dist_PR
+
+# Comparing summaries Sqft_PR
+summary(mod.Sqft_PR)
+pred.Sqft_PR <- predict(mod.Sqft_PR, newdata=train_pr)
+RMSE_trn_Sqft_PR <- sqrt(mean((train_pr$Prc_PR - pred.Sqft_PR)^2))
+RMSE_trn_Sqft_PR
+
+# Model in test set Sqft_PR
+pred.Sqft_tst_PR <- predict(mod.Sqft_PR, newdata = test_pr)
+RMSE_tst_Dist_PR <- sqrt(mean((test_pr$Prc_PR - pred.Sqft_tst_PR)^2))
+RMSE_tst_Dist_PR
+
+```
+
+#### Findings
+
+-
+**Analysis**-------------**mod.Dist_PR**-------------------**mod.Sqft_PR**
+
+F-Stat----------- p-value(9.808e-16) - PASS------ p-value (0.000005234) - PASS
+
+R2 Adj------------- 8.9 (could be better)----------- 2.8 (could be better)
+
+Residual---------------No symmetric----------------------No symmetric
+
+t-test------------- p-value < 0.05 - PASS-------------p-value < 0.05 - PASS
+
+Coefficients------- consistency (negative)------------consistency (positive)
+
+RMSE train-----------------916.456----------------------------946.6432
+
+RMSE test------------------873.1584---------------------------902.6996
+
+
+#### Conclusions
+
+
+- Both models have p-values for the f-stat significantly low. Which means that those variables are useful to predict rental price. Even though R2 Adj. is relatively low, the variability explained by Dist_PR is better with 8.9. 
+
+- The residuals in both models are no symmetrical, the minimum and maximum are so separated and the median is not close to 0.
+
+- Related to coefficients, the t-test suggest that both variables got a p-value less than 0.05 and the coefficients are consistent with the correlations previously shown.
+
+- The RMSE results of mod.Dist_PR (916.456) in comparison with the mod.Sqft_PR (946.6432) is better.
+In both models, the training set and test set are relatively closed (916.456 vs. 873.1584 for mod.Dist_PR, and 946.6432 vs. 902.6996 for mod.Sqft_PR). This suggest that models are not over-fitting neither under-fitting.
+
+I think that the best model based on the coefficients and R2 adjusted is mod.Dist_PR. However, this model could explain what happened but I would not use those models to predict new observations based on the R2 adj. I could add more variables to find a best model. 
+
+## 3. Model Development – Multivariate
+
+### Model Using All the variables
+
+```{r}
+# Creating full model
+mod.Full_PR <- lm(Prc_PR ~ . , data = train_pr, na.action=na.omit)
+
+# Summaries Model
+summary(mod.Full_PR)
+#Calculing RMSE in train set
+pred.Full_PR <- predict(mod.Full_PR, newdata=train_pr)
+RMSE_trn_Full_PR <- sqrt(mean((train_pr$Prc_PR - pred.Full_PR)^2))
+RMSE_trn_Full_PR
+
+#Calculing RMSE in train set
+pred.Full_tst_PR <- predict(mod.Full_PR, newdata = test_pr)
+RMSE_tst_Full_PR <- sqrt(mean((test_pr$Prc_PR - pred.Full_tst_PR)^2))
+RMSE_tst_Full_PR
+
+```
+
+
+#### Findings Full Model
+
+-
+**Analysis**----------------------- **mod.Full_PR**                     
+**F-Stat**-------------------- p-value(2.2e-16) - PASS        
+**R2 Adj**-------------------------- 59.1 (works)            
+**Residual**-------------- It's not perfect but it's better                      
+**t-test**-------------------- p-value < 0.05 - 8/10 PASS             
+**Coefficients**--------------- Match with correlations             
+**RMSE train**---------------------- 610.4129                          
+**RMSE test**----------------------- 636.2631                          
+
+
+#### Conclusions
+
+
+- Both models have p-values for the f-stat significantly low.
+- The R2 Adj. result is much better because explain about 59% of variability in data. Which means that these variables are useful for predicting rental price.
+
+- The residuals in this model are a little more symmetrical, the minimum and maximum are quite far apart but it looks more symmetrical.
+
+- Regarding the coefficients, mostly all of variables (8/10) have p-value below 0.05, and the coefficients are align with the correlation matrix.
+
+- The training RMSE and the test RMSE are similar Suggesting the model generalizes well and is neither overfitting nor underfitting. Additionally is much better that previous models.
+
+Based on the coefficients, the f-stat, the R2 adjusted, and the RMSE, this model seems to be more effective in predicting rental price that previos models. 
+
+
+### Model Using Backward
+
+```{r}
+# Creating backward model
+mod.Back_PR <- step(mod.Full_PR, direction="backward", details=TRUE)
+
+# Summaries Model
+summary(mod.Back_PR)
+
+# RMSE in train 
+pred.Back_PR <- predict(mod.Back_PR, newdata=train_pr)
+RMSE_trn_Back_PR <- sqrt(mean((train_pr$Prc_PR - pred.Back_PR)^2))
+RMSE_trn_Back_PR
+
+# RMSE in test 
+pred.Back_tst_PR <- predict(mod.Back_PR, newdata = test_pr)
+RMSE_tst_Back_PR <- sqrt(mean((test_pr$Prc_PR - pred.Back_tst_PR)^2))
+RMSE_tst_Back_PR
+```
+
+#### Findings Bck
+
+-
+**Analysis**----------------------- **mod.Back_PR**                     
+**F-Stat**--------------------- p-value(2.2e-16) - PASS        
+**R2 Adj**------------------ 59.2 (the best at this point)            
+**Residual**---------------- It's not perfect but it's better                     
+**t-test**-------------------- p-value < 0.05 - 8/10 PASS             
+**Coefficients**--------------- Match with correlations             
+**RMSE train**---------------------- 610.4134                         
+**RMSE test**----------------------- 636.2359 
+
+                 
+
+#### Conclusions
+
+
+- The process started with all variables included, but in the second step the variable Comp was removed. 
+- Only one variable was removed, compared with the full model. For this reason, the final model is similar to the full model, with minimal differences.
+
+It can possible notice a  slight improvement in the R2 adj. which increased from 59.1 in the full model to 59.2 in the final model. 
+
+
+## 4. Model Evaluation – Verifying Assumptions – Multivariate
+
+### Plot Residuals
+
+
+```{r}
+# Evaluating the Models  - residuals  
+# Model 1
+par(mfrow = c(2, 2))  
+plot(mod.Full_PR)  
+# Model 2
+par(mfrow = c(2, 2))  
+plot(mod.Back_PR)  
+```
+
+
+### Shapirto test
+
+
+```{r}
+#creating vectors the residual for each model, 
+
+full.res_pr <- residuals(mod.Full_PR)
+back.res_pr <- residuals(mod.Back_PR)
+
+
+# Validating if residuals are normal in full model
+shapiro.test(full.res_pr)
+# Validating if residuals are normal in back model
+shapiro.test(back.res_pr)
+```
+
+### Analyzing the errors
+
+- **Linearity** - Both models meets this assumption. The relationship between response variables and predictor variables are linear. There are not patterns in there
+- **Independence of predictors** - Both models meets this assumption. Observations are independent of each other, no linear relationship.
+- **Distribution of Error Terms** - Both models meets this assumption. The QQ plot are very similar, indicating that errors are normaly distributed, The Shapiro test got results above to 0.8 indicating that both model are normal.
+- **The residuals are homoscedastic** - Both models meet assumption. In the models the variance of the errors is constant, which means both models are stables.
+
+In the residuals vs Leverage charts, we can see an observation which has a high leverage and an inﬂuential point. However, points did not fall in the Cook’s distance, meaning that we don't have significant influences.
+
+
+## 5. Final Recommendation – Multivariate
+
+
+## Compare all RMSE
+
+```{r}
+#RMSE FULL
+RMSE_full_PR <- c(RMSE_trn_Full_PR,RMSE_tst_Full_PR)
+round(RMSE_full_PR,2)
+#RMSE BCK
+RMSE_back_PR <- c(RMSE_trn_Back_PR,RMSE_tst_Back_PR)
+round(RMSE_back_PR,2)
+#Mean residuals
+mean(full.res_pr)
+mean(back.res_pr)
+
+```
+- Based on the results, the RMSE in both models (full and backward) is almost the same, providing more precision in predicting rental prices. Considering rental price range (min: 255, median: 2180, and max: 5810), an RMSE of ~610 in the training, is not bad in relation to the median rental price. 
+- The RMSE results for both training and test, are similar, indicating that there is neither overfitting nor underfitting.
+- The R2 in both model is also similar, which means the models can explain 59% of the variability. 
+- Both models meet the residuals' assumptions.
+- The mean of the residuals are close to 0 (full: -4.112919e-15; back: -3.34164e-14)  
+
+**The biggest difference between the full model and the backward model is the number of variables, as the backward model eliminated Comp_PR. Due to its simplicity, I recommend the backward model for predicting rental prices**
+
+
+## References
+
+Ngo, L. (2023, January 10). The Ultimate Guide to Logical Operators in R. Built In. https://builtin.com/data-science/and-in-r
+Conestoga College. (2024). PROG8435 – Data Analysis, Modeling and Algorithms - LECTURE 8 – REGRESSION ANALYSIS [PowerPoint slides]. eConestoga.

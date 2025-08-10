@@ -1,0 +1,669 @@
+---
+title: "Rental-Price-Classification"
+author: "Paula Ramirez - Student id 8963215"
+date: "01/12/2024"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+# Rental-Price-Classification - PART A
+  
+## 1. Preliminary Data Preparation
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=10, fig.height=6,
+                      fig.path='Figs/', echo = TRUE)
+#Setting my working directory
+library(here)
+knitr::opts_knit$set(root.dir = here::here())
+# Verify working directory
+getwd()  
+#Clearing all the plots, the console and the workspace.
+#Setting the overall format for numbers.
+if(!is.null(dev.list())) dev.off()
+cat("\014")
+rm(list=ls())
+options(scipen=9)
+
+#If the library is not already downloaded, download it
+#Load packages
+#For Excel
+if(!require(tinytex)){install.packages("tinytex")}
+library("tinytex")
+
+if(!require(pastecs)){install.packages("pastecs")}
+library("pastecs")
+
+if(!require(lattice)){install.packages("lattice")}
+library("lattice")
+
+if(!require(vcd)){install.packages("vcd")}
+library("vcd")
+
+if(!require(HSAUR)){install.packages("HSAUR")}
+library("HSAUR")
+
+if(!require(rmarkdown)){install.packages("rmarkdown")}
+library("rmarkdown")
+
+if(!require(ggplot2)){install.packages("ggplot2")}
+library("ggplot2")
+
+if(!require(polycor)){install.packages("polycor")}
+library("polycor")
+
+if(!require(klaR)){install.packages("klaR")}
+library("klaR")
+
+if(!require(MASS)){install.packages("MASS")}
+library("MASS")
+
+if(!require(partykit)){install.packages("partykit")}
+library("partykit")
+
+if(!require(nnet)){install.packages("nnet")}
+library("nnet")
+
+```
+
+### 1. Rename all variables
+
+Appending my initials to all variables
+
+```{r}
+#Reading the file  
+data_lease_PR <- read.table(here("Rental-Price-Classification", "Rent_Class.txt"),
+                                  header = TRUE, sep = ",")
+#Converting it to dataframe.
+data_lease_PR <- as.data.frame(data_lease_PR)
+#Append PR initials to all variables in the dataframe
+colnames(data_lease_PR) <- paste(colnames(data_lease_PR), "PR", sep = "_")
+#Changing to factor
+data_lease_PR <-as.data.frame(unclass(data_lease_PR), stringsAsFactors = TRUE)
+str(data_lease_PR)
+#Showing first results 
+head(data_lease_PR)
+```
+
+### 2. Graphical Data Summaries
+
+Showing simple summaries, there was no need showing plots due to there are not outliers.
+
+```{r}
+# Showing simple summaries
+round(stat.desc(data_lease_PR),2)
+```
+
+### 3. Training and Test Set
+
+The rate of data for my train and test set is 75/25
+My speed is --> 3215 (student id)
+
+```{r}
+# Number of rows of data
+n.row <- nrow(data_lease_PR)
+# Choosing speed
+set.seed(3215)
+# Choosing Sampling rate
+sr_pr <- 0.75
+#Choose the rows for the training sample with my student id
+training.rows <- sample(1:n.row, sr_pr*n.row, replace=FALSE)
+#Assign to the training sample
+train_pr <- subset(data_lease_PR[training.rows,])
+# Assign the balance to the Test Sample (rest of data)
+test_pr <- subset(data_lease_PR[-c(training.rows),]) 
+```
+
+
+The next code will compare the train and test dataset
+
+
+```{r}
+#summaries
+summary(train_pr)
+summary(test_pr)
+
+# mean in Prc_PR each set
+round(mean(train_pr$Prc_PR),6)
+round(mean(test_pr$Prc_PR),6)
+
+#commparing means with t test
+t.test(train_pr$Prc_PR, test_pr$Prc_PR)
+
+```
+
+In the summaries, I did not evidence any dissimilarities. The means in **Prc_PR** show that there are not significant differences between sets. 
+
+In addition, the test shows that p-value is equal to 0.68 (> 0.05), indicating that we can't reject the null hypothesis that means are equal. Based on these findings, it is appropriate to proceed with these datasets as they are comparable.
+
+### 4. Creating a new Variable in test and train
+
+
+```{r}
+# Creating new variable based on Prc
+train_pr$PC_PR <- as.factor(ifelse(train_pr$Prc_PR < 2251,"L","H"))
+test_pr$PC_PR <- as.factor(ifelse(test_pr$Prc_PR < 2251,"L","H"))
+# Deleting Prc variable
+train_pr <- train_pr[, -c(1)] 
+test_pr <- test_pr[, -c(1)] 
+head(train_pr)
+```
+
+The new categorical variable called PC_PR was created in both train and test dataset. Income values higher than 2251 are marked as "H" and "L" otherwise. I have deleted the Prc_PR as requested.
+
+
+
+## 2. Exploratory Analysis
+
+### 1. Correlations
+
+
+```{r}
+# correlations only with numerical variables
+pairs(train_pr[sapply(train_pr,is.numeric)], pch=46)
+
+# correlations with factors (polycor library)
+corr_data_pr <- hetcor(train_pr)
+round(corr_data_pr$correlations,2)
+
+#print correlations types
+print(corr_data_pr)
+
+```
+#### Findings 
+
+The more significant correlations are:
+
+- **TotFloor_PR and floor_PR** 68% of correlation. There is an obvious positive and strong correlation between both variables. Which indicates that buildings with more floors have apartments located in higher floors.
+- **Bed_PR and PC_PM** 41% of correlation. Indicates that apartments with more bedrooms tend to have a "High" monthly rent
+- **Bath_PR and PC_PM** -37% correlation. There is a moderate and negative correlation, which means that apartments with less bathrooms are _surprisingly_ more expensive than apartments with more bathrooms.
+- **PC_PM and Sqft_PR** -23% correlation. Same as above, there is an unusual negative correlation between price and apartment size. Meaning that smaller apartments tend to have a higher rent price, which is rare. However the correlation is weak.
+- **PC_PM and Dist_PR** 24% correlation. This weak relationship indicates that if there is more distance is between apartments and center of town more expensive apartment is.
+
+The p-values associated with the correlations indicate that the relationships are significant. There is an exception in **City_PR** and **Comp_PR** which has a 0.4385 (a pvalue  > 0.05) indicating that correlation are less reliable.
+
+## 3. Model Development
+
+### 1. Logistic regression models - Full model
+
+```{r}
+# Full Model All variables
+rent_glm_full = glm(PC_PR ~ . ,
+              family="binomial", data=train_pr, na.action=na.omit)
+# Summary
+summary(rent_glm_full)
+  
+```
+
+### 2. Logistic regression models - Backward model
+
+```{r}
+# Backward Model All variables
+rent_glm_back <- step(rent_glm_full, direction ="backward", trace=TRUE)
+# Summary
+summary(rent_glm_back)
+
+```
+
+#### Findings and comparrison between models
+
+-
+**Analysis**-------------**rent_glm_full**------------**rent_glm_back**
+
+Fisher iterations---------model converges---------------model converge
+
+AIC-------------------------797.69--------------------------794.24
+
+Residual Deviance-----------777.69--------------------------778.24
+
+z-values---------------------6/9-----------------------------6/7
+
+Parameter Co-Efficients------6/8-----------------------------5/6
+
+
+- Both models have converged, meaning that those have found an optimal solution.
+
+- The backward model has a lower AIC, this is because some less significant variables were eliminated. (TotFloor_PR)
+
+- Regarding to Residual Deviance, the full model fits the data a slightly better that the backward model because the back model has removed two variables, so the residuals go up. However, the difference  between two models is not significant, both models provide an improvement over the null model.
+
+- In terms of Z Values, the full model indicates that only 6 of 8 variables rejected the null hypotesis that coefficient is 0. But the backward model suggest better results, with 5 of 6 coefficient indicating that backward model is more significant. 
+
+- Almost all variables are consistent with correlation matrix. In the full model **TotFloor_PR** and **City_PR** are inconsistent and in the back model only the city showed a different correlation.
+
+### 3. significantly influential datapoints
+
+```{r}
+# analyze the output for full model
+plot(rent_glm_full,which=4, id.n=6)
+#Residuals
+r_full <- residuals(rent_glm_full)
+plot(r_full)
+
+# analyze the output for full model
+plot(rent_glm_back,which=4, id.n=6)
+#Residuals
+r_back <- residuals(rent_glm_back)
+plot(r_back)
+
+
+
+```
+
+There are not influential points or observations in either the full model or back model. All points are bellow 0.5. In addition, the scatter plots are not showing any pattern, indicating that residuals have variability around 0. 
+
+
+### 4.Recommendation
+
+As was explain above, the main measures have no significant differences. However, the backward model eliminated two variables that did not have impact on the model (Comp_PR and TotFloor_PR), making it more efficient due to its simplicity (less variables).
+
+
+# PART B - Fitting models
+  
+## 1. Logistic Regression 
+
+In this step I created a new model, this time with direction parameter in  "both". The result was the same than the backward because we start from the full model. Also, I calculated the processing time and confusion matrix for future comparisons.
+
+```{r}
+# Creating probabilities with times
+start_time <- Sys.time()
+rent_glm_stp <- step(rent_glm_full, direction="both", trace=FALSE)
+end_time <- Sys.time()
+# Calculate the time (in seconds)
+t_glm_PR <- end_time - start_time
+
+# Using the step option in the glm function to fit the model
+resp_glm_PR <- predict(rent_glm_stp, newdata=train_pr, type="response")   
+# Classifying probabilites 
+class_glm <- ifelse(resp_glm_PR > 0.5, "1","0") 
+# Creating confussion matrix
+Conf_glm_tn <- table(train_pr$PC_PR, class_glm, dnn=list("Actual Rent","Predicted") )
+
+# Printing results
+t_glm_PR
+print("Confusion Matrix with Logistic Regression - Tainning")
+Conf_glm_tn
+```
+
+Now creating confusion matrix with test dataset
+
+
+```{r}
+
+# Creating probabilities with test
+resp_glm_test_PR <- predict(rent_glm_stp, newdata=test_pr, type="response")   
+# Classifying probabilites 
+class_glm_test <- ifelse(resp_glm_test_PR > 0.5, "1","0") 
+# Creating confussion matrix
+Conf_glm_test <- table(test_pr$PC_PR, class_glm_test, dnn=list("Actual Rent","Predicted") )
+
+# Printing results
+print("Confusion Matrix with Logistic Regression - Test")
+Conf_glm_test
+```
+
+## 2. Naïve-Bayes Classification
+
+```{r, warning=FALSE}
+# Creating probabilities with times
+start_time <- Sys.time()
+rent_nb <- NaiveBayes(PC_PR ~ . , data = train_pr, na.action=na.omit)
+end_time <- Sys.time()
+# Calculate the time (in seconds)
+t_nb_PR <- end_time - start_time
+
+# Using the NaiveBayes model to fit the model
+resp_nb_PR <- predict(rent_nb, newdata=train_pr)   
+# Creating confussion matrix
+Conf_nb_tn <- table(Actual=train_pr$PC_PR, Predicted=resp_nb_PR$class)
+
+# Printing results
+t_nb_PR
+print("Confusion Matrix with Naïve-Bayes - Tainning")
+Conf_nb_tn
+
+```
+Now creating confusion matrix with test dataset
+
+```{r, warning=FALSE}
+# Creating probabilities with test
+resp_nb_test_PR <- predict(rent_nb, newdata=test_pr)   
+# Creating confussion matrix
+Conf_nb_test <- table(Actual=test_pr$PC_PR, Predicted=resp_nb_test_PR$class)
+
+# Printing results
+print("Confusion Matrix with Naïve-Bayes - Test")
+Conf_nb_test
+```
+
+## 3. Recursive Partitioning Analysis
+
+```{r}
+# Creating probabilities with times
+start_time <- Sys.time()
+rent_rp <- ctree(PC_PR ~ . , data = train_pr)
+end_time <- Sys.time()
+# Calculate the time (in seconds)
+t_rp_PR <- end_time - start_time
+
+#plot to analysis
+plot(rent_rp, gp=gpar(fontsize=8))
+
+# Using the recursive partitioning model for fit the model
+resp_rp_PR <- predict(rent_rp, newdata=train_pr)   
+# Creating confussion matrix
+Conf_rp_tn <- table(Actual=train_pr$PC_PR, Predicted=resp_rp_PR)
+
+# Printing results
+t_rp_PR
+print("Confusion Matrix with Recursive Partitioning - Tainning")
+Conf_rp_tn
+
+```
+Now creating confusion matrix with test dataset
+
+```{r, warning=FALSE}
+# Creating probabilities with test
+resp_rp_test_PR <- predict(rent_rp, newdata=test_pr)   
+# Creating confussion matrix
+Conf_rp_test <- table(Actual=test_pr$PC_PR, Predicted=resp_rp_test_PR)
+
+# Printing results
+print("Confusion Matrix with Recursive Partitioning - Test")
+Conf_rp_test
+```
+
+
+## 4. Neural Network Fitting
+
+```{r}
+# Creating probabilities with times
+start_time <- Sys.time()
+# Using neural network model with size 4 and range 0.0001 as requested
+rent_nn <- nnet(PC_PR ~ . , data = train_pr, size=4, rang=0.0001, maxit=1200, trace=TRUE)
+end_time <- Sys.time()
+# Calculate the time (in seconds)
+t_nn_PR <- end_time - start_time
+
+# Using the Neural Network model for fit the model
+resp_nn_PR <- predict(rent_nn, newdata=train_pr, type="class")   
+# Creating confussion matrix
+Conf_nn_tn <- table(Actual=train_pr$PC_PR, Predicted=resp_nn_PR)
+
+# Printing results
+t_nn_PR
+print("Confusion Matrix with Neural Network - Tainning")
+Conf_nn_tn
+
+```
+
+Now creating confusion matrix with test dataset
+
+```{r}
+# Creating probabilities with test
+resp_nn_test_PR <- predict(rent_nn, newdata=test_pr, type="class")   
+# Creating confussion matrix
+Conf_nn_test <- table(Actual=test_pr$PC_PR, Predicted=resp_nn_test_PR)
+
+# Printing results
+print("Confusion Matrix with Neural Network - Test")
+Conf_nn_test
+```
+
+## 5. Compare All Classifiers 
+
+### 1. Which classifier is most accurate?
+
+```{r}
+# Calculating accuracy on all models and training and testing datasets
+
+#GLM MODEL - TRAIN
+TOTAL_GLM_TN <- sum(Conf_glm_tn)
+TP_GLM_TN <- Conf_glm_tn[2,2]
+TN_GLM_TN <- Conf_glm_tn[1,1]
+FP_GLM_TN <- Conf_glm_tn[1,2]
+FN_GLM_TN <- Conf_glm_tn[2,1]
+#Accuracy
+ACC_GLM_TN <- (TP_GLM_TN+TN_GLM_TN)/TOTAL_GLM_TN
+
+print(paste("Accuracy glm model train:", round(ACC_GLM_TN, 3)))
+
+#GLM MODEL - TEST
+TOTAL_GLM_TST <- sum(Conf_glm_test)
+TP_GLM_TST <- Conf_glm_test[2,2]
+TN_GLM_TST <- Conf_glm_test[1,1]
+FP_GLM_TST <- Conf_glm_test[1,2]
+FN_GLM_TST <- Conf_glm_test[2,1]
+#Accuracy
+ACC_GLM_TST <- (TP_GLM_TST+TN_GLM_TST)/TOTAL_GLM_TST
+
+print(paste("Accuracy glm model train:", round(ACC_GLM_TST, 3)))
+
+
+# Naïve-Bayes MODEL - TRAIN
+TOTAL_NB_TN <- sum(Conf_nb_tn)
+TP_NB_TN <- Conf_nb_tn[2,2]
+TN_NB_TN <- Conf_nb_tn[1,1]
+FP_NB_TN <- Conf_nb_tn[1,2]
+FN_NB_TN <- Conf_nb_tn[2,1]
+#Accuracy
+ACC_NB_TN <- (TP_NB_TN+TN_NB_TN)/TOTAL_NB_TN
+
+print(paste("Accuracy Naïve-Bayes model train:", round(ACC_NB_TN, 3)))
+
+# Naïve-Bayes MODEL - TEST
+TOTAL_NB_TST <- sum(Conf_nb_test)
+TP_NB_TST <- Conf_nb_test[2,2]
+TN_NB_TST <- Conf_nb_test[1,1]
+FP_NB_TST <- Conf_nb_test[1,2]
+FN_NB_TST <- Conf_nb_test[2,1]
+#Accuracy
+ACC_NB_TST <- (TP_NB_TST+TN_NB_TST)/TOTAL_NB_TST
+
+print(paste("Accuracy Naïve-Bayes model train:", round(ACC_NB_TST, 3)))
+
+# Recursive Partitioning MODEL - TRAIN
+TOTAL_RP_TN <- sum(Conf_rp_tn)
+TP_RP_TN <- Conf_rp_tn[2,2]
+TN_RP_TN <- Conf_rp_tn[1,1]
+FP_RP_TN <- Conf_rp_tn[1,2]
+FN_RP_TN <- Conf_rp_tn[2,1]
+#Accuracy
+ACC_RP_TN <- (TP_RP_TN+TN_RP_TN)/TOTAL_RP_TN
+
+print(paste("Accuracy Recursive Partitioning model train:", round(ACC_RP_TN, 3)))
+
+# Recursive Partitioning MODEL - TEST
+TOTAL_RP_TST <- sum(Conf_rp_test)
+TP_RP_TST <- Conf_rp_test[2,2]
+TN_RP_TST <- Conf_rp_test[1,1]
+FP_RP_TST <- Conf_rp_test[1,2]
+FN_RP_TST <- Conf_rp_test[2,1]
+#Accuracy
+ACC_RP_TST <- (TP_RP_TST+TN_RP_TST)/TOTAL_RP_TST
+
+print(paste("Accuracy Recursive Partitioning model train:", round(ACC_RP_TST, 3)))
+
+# Neural Network MODEL - TRAIN
+TOTAL_NN_TN <- sum(Conf_nn_tn)
+TP_NN_TN <- Conf_nn_tn[2,2]
+TN_NN_TN <- Conf_nn_tn[1,1]
+FP_NN_TN <- Conf_nn_tn[1,2]
+FN_NN_TN <- Conf_nn_tn[2,1]
+#Accuracy
+ACC_NN_TN <- (TP_NN_TN+TN_NN_TN)/TOTAL_NN_TN
+
+print(paste("Accuracy Neural Network model train:", round(ACC_NN_TN, 3)))
+
+# Neural Network MODEL MODEL - TEST
+TOTAL_NN_TST <- sum(Conf_nn_test)
+TP_NN_TST <- Conf_nn_test[2,2]
+TN_NN_TST <- Conf_nn_test[1,1]
+FP_NN_TST <- Conf_nn_test[1,2]
+FN_NN_TST <- Conf_nn_test[2,1]
+#Accuracy
+ACC_NN_TST <- (TP_NN_TST+TN_NN_TST)/TOTAL_NN_TST
+
+print(paste("Accuracy Neural Network model train:", round(ACC_NN_TST, 3)))
+
+```
+**The most accurate model on both trainning and testing datasets is the glm model with 75.4% in train and 77.9% in test.** 
+
+The model with the lowest accuracy in the training dataset is Naive-Bayes with 74.6% and in the test dataset it is Recursive Partitioning with 71/1%
+
+### 2. Which classifier seems most consistent?
+
+To evaluate this, I created a metric to compare the differences between the training and test accuracy metrics for each model.
+
+```{r}
+#GLM MODEL DIFF
+DIFF_GLM <- ACC_GLM_TN - ACC_GLM_TST
+
+print(paste("Difference glm model train vs test:", round(DIFF_GLM, 3)))
+
+
+# Naïve-Bayes MODEL DIFF
+DIFF_NB <- ACC_NB_TN - ACC_NB_TST
+
+print(paste("Difference Naïve-Bayes model train vs test:", round(DIFF_NB, 3)))
+
+# Recursive Partitioning MODEL DIFF
+DIFF_RP <- ACC_RP_TN - ACC_RP_TST
+
+print(paste("Difference Recursive Partitioning train vs test:", round(DIFF_RP, 3)))
+
+
+# Neural Network MODEL DIFF
+DIFF_NN <- ACC_NN_TN - ACC_NN_TST
+
+print(paste("Difference Neural Network train vs test:", round(DIFF_NN, 3)))
+
+
+```
+
+The recursive partitioning model is the most overfitted because the difference between training and testing is the highest with 0.039 difference.
+
+**Neural Network and Logistic Regression models have the best balance between training and testing, which means that those are well-fitting models.**
+
+### 3. Which classifier is most suitable when processing speed is most important?
+
+I will compare all the times
+
+```{r}
+# GLM
+t_glm_PR
+
+# Naïve-Bayes
+t_nb_PR
+
+# Recursive Partitioning
+t_rp_PR
+
+# Neural Network
+t_nn_PR
+```
+
+**The best performing model is Naïve-Bayes, the processing time was shorter with 0.02492404**
+
+
+### 4. Which classifier minimizes false positives?
+
+          
+Retrieving the FP from all models: 
+          
+     
+```{r}
+# GLM train
+FP_GLM_TN
+# GLM test
+FP_GLM_TST
+
+# Naïve-Bayes train
+FP_NB_TN
+# Naïve-Bayes test
+FP_NB_TST
+
+# Recursive Partitioning train
+FP_RP_TN
+# Recursive Partitioning test
+FP_RP_TST
+
+# Neural Network train
+FP_NN_TN
+# Neural Network test
+FP_NN_TST
+
+
+```
+
+**Based on the results, the Neural Network have less false positive in test, this makes it the best model that minimizes false positives.**
+
+Although recursive partitioning  model has less FP in training, the difference is not significant with the NN model. I think that is more important to evaluate the results in the test dataset for this question. 
+
+### 5. In your opinion, which classifier is best overall? Make sure you state why.
+
+Calculating specificity TN/(TN+FP) and sensibility TP/(TP+FN) for more evidence
+
+```{r}
+# GLM specificity train
+TN_GLM_TN/(TN_GLM_TN+FP_GLM_TN)
+# GLM specificity test
+TN_GLM_TST/(TN_GLM_TST+FP_GLM_TST)
+
+
+# GLM Sensitivity train
+TP_GLM_TN/(TP_GLM_TN+FN_GLM_TN)
+# GLM Sensitivity test
+TP_GLM_TST/(TP_GLM_TST+FN_GLM_TST)
+
+
+# Naïve-Bayes specificity train
+TN_NB_TN/(TN_NB_TN+FP_NB_TN)
+# Naïve-Bayes specificity test
+TN_NB_TST/(TN_NB_TST+FP_NB_TST)
+
+# Naïve-Bayes Sensitivity train
+TP_NB_TN/(TP_NB_TN+FN_NB_TN)
+# Naïve-Bayes Sensitivity test
+TP_NB_TST/(TP_NB_TST+FN_NB_TST)
+
+# Recursive Partitioning specificity train
+TN_RP_TN/(TN_RP_TN+FP_RP_TN)
+# Recursive Partitioning specificity test
+TN_RP_TST/(TN_RP_TST+FP_RP_TST)
+
+# Recursive Partitioning Sensitivity train
+TP_RP_TN/(TP_RP_TN+FN_RP_TN)
+# Recursive Partitioning Sensitivity test
+TP_RP_TST/(TP_RP_TST+FN_RP_TST)
+
+# Neural Network specificity train
+TN_NN_TN/(TN_NN_TN+FP_NN_TN)
+# Neural Network specificity test
+TN_NN_TST/(TN_NN_TST+FP_NN_TST)
+
+# Neural Network Sensitivity train
+TP_NN_TN/(TP_NN_TN+FN_NN_TN)
+# Neural Network Sensitivity test
+TP_NN_TST/(TP_NN_TST+FN_NN_TST)
+
+
+```
+The best answer to this question is: It depends.
+
+If we want the most accurate model, the LGM model would undoubtedly be the best option, as it has the highest percentage of accuracy and is the best model in terms of specificity in tests. However, this model has a longer processing time. This is why, if time is the priority, we could opt for another model, the NB model.
+
+If, on the other hand, our problem is false positives, the model that favors us is the NN with only 24 FP.
+
+So, depending on the model selection, it depends on what we are looking for.
+
+
+
+## References
+
+Conestoga College. (2024). PROG8435 – Data Analysis, Modeling and Algorithms - LECTURE 10 – CLASSIFICATION TECHNIQUES (1) LOGISTIC REGRESSION [PowerPoint slides]. eConestoga.
+Conestoga College. (2024). PROG8435 – Data Analysis, Modeling and Algorithms - LECTURE 11 – CLASSIFICATION TECHNIQUES (2)
+LOGISTIC REGRESSION [PowerPoint slides]. eConestoga.
+Conestoga College. (2024). PROG8435 – Data Analysis, Modeling and Algorithms - LECTURE 12 – CLASSIFICATION TECHNIQUES (3) NAIVE-BAYES, NEURAL NETWORKS, RECURSIVE PARTITIOING [PowerPoint slides]. eConestoga.
+cat function - RDocumentation. (n.d.). https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/cat
